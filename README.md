@@ -1,4 +1,4 @@
-## Project Overview
+# Lab Overview
 
 This repo demonstrates a small but complete applied data-science workflow:
 
