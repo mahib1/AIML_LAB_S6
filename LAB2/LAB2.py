@@ -2,65 +2,17 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, r2_score
 
 # ---------------------------------------------------------
-# 1. Gradient Descent Implementation (Elastic Net Support)
-# ---------------------------------------------------------
-def gradient_descent(X, y, lr=0.01, iters=5000, l1=0, l2=0):
-    """
-    Performs Gradient Descent with Elastic Net regularization.
-    l1=0, l2=0 => OLS (Ordinary Least Squares)
-    l1>0, l2=0 => Lasso Regression
-    l1=0, l2>0 => Ridge Regression
-    l1>0, l2>0 => Elastic Net Regression
-    """
-    m, n = X.shape
-    theta = np.zeros((n, 1))
-    cost_history = []
-    
-    for i in range(iters):
-        predictions = X.dot(theta)
-        errors = predictions - y
-        
-        # Standard MSE Gradient
-        gradient = (1/m) * X.T.dot(errors)
-        
-        # Add Regularization Gradients (applied to all except intercept theta[0])
-        if l1 > 0:
-            gradient[1:] += l1 * np.sign(theta[1:])
-        if l2 > 0:
-            gradient[1:] += 2 * l2 * theta[1:]
-            
-        theta = theta - lr * gradient
-        
-        # Calculate Cost for Monitoring
-        mse = (1/(2*m)) * np.sum(np.square(errors))
-        penalty = l1 * np.sum(np.abs(theta[1:])) + l2 * np.sum(np.square(theta[1:]))
-        cost_history.append(mse + penalty)
-        
-    return theta, cost_history
-
-def calculate_metrics(y_true, y_pred, n_samples, n_features):
-    """Calculates Mean Squared Error and Adjusted R-squared."""
-    mse = np.mean((y_true - y_pred)**2)
-    ss_res = np.sum((y_true - y_pred)**2)
-    ss_tot = np.sum((y_true - np.mean(y_true))**2)
-    r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
-    # Adjusted R2 Formula
-    adj_r2 = 1 - (1 - r2) * (n_samples - 1) / (n_samples - n_features - 1) if (n_samples - n_features - 1) > 0 else r2
-    return mse, r2, adj_r2
-
-# ---------------------------------------------------------
-# 2. Data Cleaning and Merging
+# 1. Data Cleaning and Merging
 # ---------------------------------------------------------
 print("Loading and cleaning datasets...")
-# Load datasets (Ensure these files are in your working directory)
-try:
-    mgnrega = pd.read_csv('MGNREGA_dataset_AtAGlance.csv')
-    anganwadi = pd.read_csv('number_of_children_enrolled_in_anganwadis_2025_10.csv')
-except FileNotFoundError:
-    print("Error: CSV files not found. Please ensure the filenames match.")
-    exit()
+mgnrega = pd.read_csv('MGNREGA_dataset_AtAGlance.csv')
+anganwadi = pd.read_csv('number_of_children_enrolled_in_anganwadis_2025_10.csv')
 
 # Aggregate Anganwadi data (Summing children count per district)
 ang_agg = anganwadi.groupby('D_Name').agg({
@@ -74,122 +26,140 @@ mgnrega['district_clean'] = mgnrega['district_name'].str.upper().str.strip()
 ang_agg['district_clean'] = ang_agg['D_Name'].str.upper().str.strip()
 
 # Merge Datasets
-composite_df = pd.merge(mgnrega, ang_agg, on='district_clean', how='inner')
+df = pd.merge(mgnrega, ang_agg, on='district_clean', how='inner')
 
-# Feature Selection
-target = 'total_expenditure'
+# ---------------------------------------------------------
+# 2. Feature Engineering
+# ---------------------------------------------------------
+# Target: total_expenditure
+# Artificial Regressor: Interaction between workers and wage rate
+df['worker_wage_interaction'] = (df['total_no_of_active_workers'] * df['average_wage_rate_per_day_per_person']) / 100000
+
 features = [
     'total_no_of_active_workers', 
     'average_wage_rate_per_day_per_person', 
     'Tot_Children_0to6M', 
     'Tot_Children_7Mto3Y', 
-    'Tot_Children_3Yto6Y'
+    'Tot_Children_3Yto6Y',
+    'worker_wage_interaction'
 ]
+target = 'total_expenditure'
 
-# Create Artificial Correlated Regressor
-# We create an interaction term (Workers * Wage) which we expect to be highly correlated with expenditure
-composite_df['worker_wage_interaction'] = (composite_df['total_no_of_active_workers'] * composite_df['average_wage_rate_per_day_per_person']) / 100000
-features.append('worker_wage_interaction')
-
-# Remove any missing values
-df_final = composite_df[features + [target]].dropna()
+# Drop rows with missing values
+df_final = df[features + [target]].dropna()
 
 # ---------------------------------------------------------
-# 3. Correlation Matrix and Heatmap
+# 3. Exploratory Analysis: Correlation Heatmap
 # ---------------------------------------------------------
 plt.figure(figsize=(10, 8))
 sns.heatmap(df_final.corr(), annot=True, cmap='coolwarm', fmt=".2f")
-plt.title('Feature Correlation Matrix')
-plt.tight_layout()
+plt.title('Correlation Heatmap')
 plt.savefig('correlation_heatmap.png')
-print("Correlation heatmap saved as 'correlation_heatmap.png'.")
+print("Heatmap saved as 'correlation_heatmap.png'.")
 
 # ---------------------------------------------------------
-# 4. Data Preparation
+# 4. Data Preparation and Scaling
 # ---------------------------------------------------------
-X = df_final[features].values
-y = df_final[target].values.reshape(-1, 1)
+X = df_final[features]
+y = df_final[target]
 
-# Feature Scaling (Standardization is crucial for regularization and GD convergence)
-X_mean, X_std = np.mean(X, axis=0), np.std(X, axis=0)
-X_scaled = (X - X_mean) / X_std
-X_scaled = np.hstack([np.ones((X_scaled.shape[0], 1)), X_scaled]) # Add Bias/Intercept term
+# Standardize features (Mean=0, Std=1)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
 # Train-Test Split (80:20)
-def train_test_split(X, y, ratio=0.8):
-    m = len(X)
-    indices = np.random.permutation(m)
-    train_size = int(m * ratio)
-    train_idx, test_idx = indices[:train_size], indices[train_size:]
-    return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
-
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, 0.8)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
 # ---------------------------------------------------------
-# 5. Regression Experiments
+# 5. Hyperparameter Tuning using Scikit-Learn (GridSearchCV)
 # ---------------------------------------------------------
-# Define hyper-parameters
-lr = 0.005
-iters = 5000
+# Range of Lambda (Alpha) values to test
+alphas = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
 
-# Dictionary of models to run: { "Name": {"l1": penalty, "l2": penalty} }
-experiments = {
-    "OLS (No Reg)": {"l1": 0, "l2": 0},
-    "Lasso (L1=100)": {"l1": 100, "l2": 0},
-    "Ridge (L2=100)": {"l1": 0, "l2": 100},
-    "Elastic Net": {"l1": 50, "l2": 50}
+# A. Tune Lasso
+lasso_cv = GridSearchCV(Lasso(max_iter=10000), param_grid={'alpha': alphas}, cv=5, scoring='neg_mean_squared_error')
+lasso_cv.fit(X_train, y_train)
+best_lasso_alpha = lasso_cv.best_params_['alpha']
+
+# B. Tune Ridge
+ridge_cv = GridSearchCV(Ridge(), param_grid={'alpha': alphas}, cv=5, scoring='neg_mean_squared_error')
+ridge_cv.fit(X_train, y_train)
+best_ridge_alpha = ridge_cv.best_params_['alpha']
+
+# C. Tune Elastic Net
+en_params = {
+    'alpha': alphas,
+    'l1_ratio': [0.2, 0.5, 0.8] # Ratio of L1 vs L2 penalty
+}
+en_cv = GridSearchCV(ElasticNet(max_iter=10000), param_grid=en_params, cv=5, scoring='neg_mean_squared_error')
+en_cv.fit(X_train, y_train)
+best_en_params = en_cv.best_params_
+
+print(f"\nBest Lasso Alpha: {best_lasso_alpha}")
+print(f"Best Ridge Alpha: {best_ridge_alpha}")
+print(f"Best Elastic Net Params: {best_en_params}")
+
+# ---------------------------------------------------------
+# 6. Final Model Training & Evaluation
+# ---------------------------------------------------------
+models = {
+    "OLS": LinearRegression(),
+    "Tuned Lasso": Lasso(alpha=best_lasso_alpha),
+    "Tuned Ridge": Ridge(alpha=best_ridge_alpha),
+    "Tuned ElasticNet": ElasticNet(**best_en_params)
 }
 
-final_results = []
-plt.figure(figsize=(10, 6))
-
-for name, params in experiments.items():
-    print(f"Executing {name}...")
-    theta, cost_history = gradient_descent(X_train, y_train, lr=lr, iters=iters, **params)
+results = []
+for name, model in models.items():
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
     
-    # Predict and evaluate on Test set
-    y_pred = X_test.dot(theta)
-    mse, r2, adj_r2 = calculate_metrics(y_test, y_pred, len(y_test), len(features))
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
     
-    final_results.append({
+    # Calculate Adjusted R2
+    n = len(y_test)
+    p = X_train.shape[1]
+    adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
+    
+    results.append({
         "Model": name,
         "MSE": mse,
         "Adj R2": adj_r2,
-        "Coeffs": theta.flatten()
+        "Coefficients": np.concatenate([[model.intercept_], model.coef_]) if name != "OLS" else np.concatenate([[model.intercept_], model.coef_])
     })
-    
-    # Plot Convergence Curve
-    plt.plot(cost_history, label=name)
-
-# Format and save convergence plot
-plt.yscale('log')
-plt.title('Model Convergence Comparison')
-plt.xlabel('Iterations')
-plt.ylabel('Cost (MSE + Regularization)')
-plt.legend()
-plt.grid(True, which="both", ls="-", alpha=0.5)
-plt.savefig('convergence_comparison.png')
 
 # ---------------------------------------------------------
-# 6. Final Report and Analysis
+# 7. Final Report & Plots
 # ---------------------------------------------------------
-perf_report = pd.DataFrame(final_results).drop(columns="Coeffs")
+perf_df = pd.DataFrame(results).drop(columns="Coefficients")
 print("\n--- Model Performance Comparison ---")
-print(perf_report)
+print(perf_df)
 
-# Coefficient Comparison Table
-coeff_table = pd.DataFrame({
+# Plot Tuning Results (Lasso Example)
+plt.figure(figsize=(10, 6))
+cv_results = pd.DataFrame(lasso_cv.cv_results_)
+plt.plot(cv_results['param_alpha'], -cv_results['mean_test_score'], marker='o')
+plt.xscale('log')
+plt.xlabel('Alpha (Lambda)')
+plt.ylabel('Mean Squared Error (CV)')
+plt.title('Lasso Hyperparameter Tuning Performance')
+plt.grid(True)
+plt.savefig('tuning_curve.png')
+
+# Coefficient Comparison
+coeff_df = pd.DataFrame({
     "Feature": ["Intercept"] + features,
-    "OLS": final_results[0]["Coeffs"],
-    "Lasso": final_results[1]["Coeffs"],
-    "Ridge": final_results[2]["Coeffs"],
-    "ElasticNet": final_results[3]["Coeffs"]
+    "OLS": results[0]["Coefficients"],
+    "Lasso": results[1]["Coefficients"],
+    "Ridge": results[2]["Coefficients"],
+    "ElasticNet": results[3]["Coefficients"]
 })
 
-print("\n--- Feature Coefficients ---")
-print(coeff_table)
+print("\n--- Final Coefficients ---")
+print(coeff_df)
 
-# Save results for external use
-perf_report.to_csv('metrics_summary.csv', index=False)
-coeff_table.to_csv('coefficients_summary.csv', index=False)
-print("\nSuccess: Performance and coefficients saved as CSV files.")
+# Save results
+perf_df.to_csv('tuned_performance.csv', index=False)
+coeff_df.to_csv('tuned_coefficients.csv', index=False)
+print("\nResults saved to CSV. All plots generated.")
