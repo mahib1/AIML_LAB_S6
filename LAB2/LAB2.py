@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.linear_model import LinearRegression, Lasso, Ridge, ElasticNet
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
+import os
 
 # ---------------------------------------------------------
 # 1. Data Processing & Feature Engineering
@@ -13,6 +14,27 @@ from sklearn.metrics import mean_squared_error, r2_score
 print("Loading and merging data...")
 mgnrega = pd.read_csv('MGNREGA_dataset_AtAGlance.csv')
 anganwadi = pd.read_csv('number_of_children_enrolled_in_anganwadis_2025_10.csv')
+
+def save_scatter_plots(df, target_col, output_dir='./img'):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created directory: {output_dir}")
+
+    regressors = df.select_dtypes(include=['number']).columns.tolist()
+    if target_col in regressors:
+        regressors.remove(target_col)
+
+    print(f"Generating {len(regressors)} scatter plots...")
+    for col in regressors:
+        plt.figure(figsize=(8, 6))
+        plt.scatter(df[col], df[target_col], alpha=0.5, color='royalblue', edgecolors='k')
+        plt.title(f'{target_col} vs {col}', fontsize=14)
+        plt.xlabel(col, fontsize=12)
+        plt.ylabel(target_col, fontsize=12)
+        plt.grid(True, linestyle='--', alpha=0.7)
+        file_path = os.path.join(output_dir, f'scatter_{col}.png')
+        plt.savefig(file_path, bbox_inches='tight')
+        plt.close()
 
 # Aggregation & Merging
 ang_agg = anganwadi.groupby('D_Name').agg({
@@ -31,6 +53,9 @@ features = ['total_no_of_active_workers', 'average_wage_rate_per_day_per_person'
 target = 'total_expenditure'
 df_final = df[features + [target]].dropna()
 
+# RUN SCATTER PLOTS ON RAW DATA (Before scaling)
+save_scatter_plots(df_final, target)
+
 # ---------------------------------------------------------
 # 2. Relationship Analysis Plots
 # ---------------------------------------------------------
@@ -40,25 +65,31 @@ sns.heatmap(df_final.corr(), annot=True, cmap='coolwarm', fmt=".2f")
 plt.title('Correlation Matrix Heatmap')
 plt.savefig('correlation_heatmap.png')
 
-# Covariance Heatmap
+# Covariance Heatmap (Kept as per your original script logic)
 plt.figure(figsize=(10, 8))
-sns.heatmap(df_final.corr(), annot=True, cmap='viridis', fmt=".1e")
-plt.title('Correlation Matrix Heatmap')
-plt.savefig('correlation_heatmap.png')
+sns.heatmap(df_final.cov(), annot=True, cmap='viridis', fmt=".1e")
+plt.title('Covariance Matrix Heatmap')
+plt.savefig('covariance_heatmap.png')
 
 # ---------------------------------------------------------
-# 3. Preparation & Hyperparameter Tuning
+# 3. Normalization & Hyperparameter Tuning
 # ---------------------------------------------------------
 X = df_final[features]
 y = df_final[target]
+
+# Splitting
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Normalization Step
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+X_train = scaler.fit_transform(X_train_raw)
+X_test = scaler.transform(X_test_raw)
+print("Features normalized using StandardScaler.")
 
 alphas = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
 
 # Tuning Lasso
-lasso_gs = GridSearchCV(Lasso(), {'alpha': alphas}, cv=5, scoring='neg_mean_squared_error')
+lasso_gs = GridSearchCV(Lasso(max_iter=10000), {'alpha': alphas}, cv=5, scoring='neg_mean_squared_error')
 lasso_gs.fit(X_train, y_train)
 plt.figure(figsize=(8, 6))
 plt.plot(alphas, -lasso_gs.cv_results_['mean_test_score'], marker='o')
