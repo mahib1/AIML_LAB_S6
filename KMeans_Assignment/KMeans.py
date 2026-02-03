@@ -11,7 +11,7 @@ if not os.path.exists('img'):
     os.makedirs('img')
 
 # Load the MGNREGA dataset
-df = pd.read_csv('data\\MGNREGA_dataset_AtAGlance.csv')
+df = pd.read_csv('data/MGNREGA_dataset_AtAGlance.csv')
 
 # Selecting features for clustering
 features = [
@@ -25,15 +25,16 @@ X = df[features].dropna() # Ensure no missing values
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
+maxClu = 20
 # 1. Elbow Method to find optimal K
 wcss = []
-for i in range(1, 11):
+for i in range(1, maxClu, 2):
     kmeans = KMeans(n_clusters=i, init='k-means++', random_state=42, n_init=10)
     kmeans.fit(X_scaled)
     wcss.append(kmeans.inertia_)
 
 plt.figure(figsize=(10, 6))
-plt.plot(range(1, 11), wcss, marker='o', linestyle='--')
+plt.plot(range(1, maxClu, 2), wcss, marker='o', linestyle='--')
 plt.title('Elbow Method for Optimal Number of Clusters')
 plt.xlabel('Number of Clusters')
 plt.ylabel('WCSS (Inertia)')
@@ -42,7 +43,7 @@ plt.savefig('img/elbow_method.png')
 plt.close()
 
 # 2. Applying K-Means (Optimal K chosen as 4 based on results)
-k = 4
+k = 10
 kmeans = KMeans(n_clusters=k, init='k-means++', random_state=42, n_init=10)
 clusters = kmeans.fit_predict(X_scaled)
 
