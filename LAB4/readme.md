@@ -40,7 +40,7 @@ In regression, instead of a "vote," the computer takes the **average** of the ne
 ---
 
 ## The Math: Euclidean Distance in Action
-
+$$d(p, q) = \sqrt{\sum_{i=1}^{n} (p_i - q_i)^2}$$
 For both tasks, the computer treats every district as a coordinate in a multi-dimensional graph. It calculates the similarity between two districts,  and , using the **Euclidean Distance** formula:
 
 Before this calculation, we apply **Standard Scaling** to ensure that features with larger numbers (like preschool counts) don't accidentally overpower features with smaller numbers (like infant counts).
