@@ -1,74 +1,97 @@
-# Combined Socio-Economic Analysis: KNN Classification & Regression
+Anganwadi Enrollment Analysis: KNN Classification & Regression
+Project Overview
+This project implements K-Nearest Neighbors (KNN), a versatile Machine Learning algorithm, to perform both Classification and Regression on child enrollment data from Anganwadi centers. The goal is to understand demographic patterns and build a predictive model that can categorize enrollment levels and estimate future child counts.
 
-## What is this project?
+By testing a range of K values (from 1 to 30), this analysis identifies the "sweet spot" where the model is most accurate without being overly sensitive to noise.
 
-This project advances our analysis of India's rural welfare programs by applying **Supervised Machine Learning** to the **Anganwadi** (Child Care) and **MGNREGA** (Employment) datasets. While our previous work focused on grouping districts (clustering), this assignment implements **K-Nearest Neighbors (KNN)** to solve two distinct mathematical problems: **Classification** and **Regression**.
+The Two-Fold Approach
+1. Classification: Predicting Enrollment Tiers
+In this task, the model classifies an Anganwadi center into one of two categories: High Enrollment (1) or Low Enrollment (0).
 
----
+The Logic: The target is created by calculating the median total enrollment across the dataset. Centers above this median are "High," and those below are "Low."
 
-## The KNN Dual-Approach
+Decision Making: The computer looks at the K most similar centers and assigns a class based on a majority vote.
 
-Imagine you are a policy maker trying to understand a new district. You look at its "nearest neighbors"—districts that have similar demographics—to make two types of predictions:
+2. Regression: Estimating Preschool Counts
+In this task, the model predicts a specific number: the total children in the 3 Years to 6 Years age group.
 
-1. **The Category (Classification):** Is this district likely to be a "High Enrollment" or "Low Enrollment" zone?
-2. **The Number (Regression):** Based on the number of infants, exactly how many preschool-aged children should we expect to see enrolled?
+The Logic: Instead of a category, the model calculates the average enrollment of the K nearest neighbors.
 
-### Multi-Type Feature Integration
+Goal: This helps in resource planning by estimating how many children will require preschool services based on current infant and toddler enrollment.
 
-To make these predictions accurate, the model processes a mix of data types:
+Technical Methodology
+Hybrid Feature Selection
+KNN is a distance-based algorithm, so it requires numerical inputs. To handle the diverse nature of this data, we use:
 
-* **Numerical Data:** Raw enrollment counts for infants (0–6 months) and toddlers (7 months – 3 years).
-* **Categorical Data:** The **District Name**. Because KNN relies on distance math, we use **Label Encoding** to transform these names into unique numerical IDs so the computer can calculate "geographical" similarity.
+Numerical Features: Enrollment figures for infants (0–6 months) and toddlers (7 months – 3 years).
 
----
+Categorical Feature: The District Name. We use a LabelEncoder to transform text-based district names into unique integers, allowing the algorithm to consider regional similarity.
 
-## The Science: Understanding K-Impact
+Data Scaling (Standardization)
+Since enrollment numbers vary significantly across age groups, we use a StandardScaler. This transforms all features to the same scale (Mean = 0, Std Dev = 1), preventing larger numbers from skewing the distance calculations.
 
-The most important setting in this algorithm is **K**—the number of neighbors the computer looks at before making a decision.
+The Math: Euclidean Distance
+Similarity between two data points (p and q) is determined by calculating the straight-line distance between them in a multi-dimensional space:
 
-### 1. Classification & Accuracy
+d(p,q)= 
+i=1
+∑
+n
+​
+ (p 
+i
+​
+ −q 
+i
+​
+ ) 
+2
+ 
 
-In classification, we assign a district to a group based on a majority vote of its neighbors. We tested the model with  values ranging from 1 to 30 to find the "Sweet Spot."
+​
+ 
+Performance Analysis: The Impact of K
+The choice of K (number of neighbors) is the most critical part of this experiment.
 
-* **Low K (e.g., K=1):** The model is a "perfectionist" and follows the training data too closely, often failing on new data (overfitting).
-* **High K (e.g., K=20):** The model becomes a "generalist," smoothing out differences but potentially missing unique local trends (underfitting).
+Classification Accuracy
+We track how the accuracy score changes as we increase K.
 
-### 2. Regression & Precision
+Small K: May lead to Overfitting (picking up on random noise).
 
-In regression, instead of a "vote," the computer takes the **average** of the neighbors' values to predict a specific number. We evaluate this using the **Mean Squared Error (MSE)** and **R2 Score**, which tells us how much of the district's enrollment variance our model can actually explain.
+Large K: May lead to Underfitting (ignoring local patterns and becoming too "blurry").
 
----
+Regression MSE (Mean Squared Error)
+For regression, we measure the "cost" of our errors using MSE. The lower the MSE, the better our predictions. By plotting MSE vs K, we look for the "elbow" where the error reaches its minimum.
 
-## The Math: Euclidean Distance in Action
+MSE= 
+n
+1
+​
+  
+i=1
+∑
+n
+​
+ (y 
+i
+​
+ − 
+y
+^
+​
+  
+i
+​
+ ) 
+2
+ 
+How to Read the Results
+img/classification_k_impact.png: Look for the highest point on the blue line. The K value at this peak is the best setting for categorizing new data.
 
-formula : 
+img/regression_k_impact.png: Look for the lowest dip on the red line. This represents the K value that produces the most precise numerical predictions.
 
-$$ 
-    d(p, q) = \sqrt{\sum_{i=1}^{n} (p_i - q_i)^2} 
-$$
+Metrics:
 
-Before this calculation, we apply Standard Scaling to ensure that features with larger numbers (like preschool counts) don't accidentally overpower
+Max Accuracy: The highest percentage of centers correctly classified.
 
-For both tasks, the computer treats every district as a coordinate in a multi-dimensional graph. It calculates the similarity between two districts,  and , using the **Euclidean Distance** formula:
-
-Before this calculation, we apply **Standard Scaling** to ensure that features with larger numbers (like preschool counts) don't accidentally overpower features with smaller numbers (like infant counts).
-
----
-
-## How to Read the Results
-
-### 1. `img/classification_k_impact.png`
-
-This plot shows the "Stability" of our model. You will notice the accuracy peaks and then plateaus. The  value at the highest peak represents the most reliable setting for categorizing new districts.
-
-### 2. Command Line Output
-
-* **Optimal K:** The neighbor count that produced the highest accuracy.
-* **Overall Accuracy:** The percentage of districts correctly categorized.
-* **Regression MSE:** The average "error" in our preschool enrollment predictions—lower is better!
-
-### 3. `img/combined_analysis_viz.png`
-
-This scatter plot visualizes the "Decision Boundaries" discovered by the model. It shows how the MGNREGA performance clusters align with the Anganwadi child demographics.
-
-
+Min MSE: The point where the model's numerical guesses were closest to the actual enrollment numbers.
