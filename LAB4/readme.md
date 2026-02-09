@@ -47,9 +47,7 @@ We measure the Mean Squared Error (MSE) when estimating the number of children i
 ### The Math: Euclidean Distance & PCA
 
 $$
-
 d(p, q) = \sqrt{\sum_{i=1}^{n} (p_i - q_i)^2}
-
 $$
 
 The distance between two points in the PCA-transformed space is still calculated using the Euclidean formula, but in a lower-dimensional  space:
